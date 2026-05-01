@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RSVP Nano — Web Emülatör</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&family=Literata:ital,wght@0,300;0,500;1,300&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0e0e0f; --surface: #161618; --surface2: #1e1e21;
+    --border: #2a2a2e; --text: #e8e6e1; --text-dim: #6b6870;
+    --accent: #e8c97a; --accent2: #c97a7a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'IBM Plex Mono', monospace; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 32px 16px; gap: 20px; }
+  header { display: flex; align-items: center; gap: 12px; width: 100%; max-width: 740px; }
+  .logo { font-size: 11px; letter-spacing: 0.25em; color: var(--text-dim); text-transform: uppercase; }
+  .logo span { color: var(--accent); }
+  .badge { margin-left: auto; font-size: 9px; letter-spacing: 0.2em; color: var(--text-dim); border: 1px solid var(--border); padding: 3px 8px; border-radius: 2px; }
+ 
+  .device { background: #111113; border: 1.5px solid #2a2a2e; border-radius: 18px; padding: 20px 28px; box-shadow: 0 0 60px rgba(0,0,0,0.8), 0 0 0 1px #1a1a1c inset; position: relative; width: 100%; max-width: 740px; }
+  .device::before { content: ''; position: absolute; top: 10px; left: 50%; transform: translateX(-50%); width: 40px; height: 3px; background: #222225; border-radius: 2px; }
+ 
+  .screen { background: #000; width: 100%; max-width: 640px; height: 172px; margin: 0 auto; border-radius: 4px; border: 1px solid #333; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 20px rgba(0,0,0,0.9) inset; cursor: pointer; }
+  .screen-inner { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; padding: 0 24px; }
+ 
+  .idle-screen { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .idle-screen .big { font-size: 28px; opacity: 0.15; }
+  .idle-screen p { font-size: 10px; letter-spacing: 0.15em; color: #333; }
+ 
+  /* RSVP */
+  #rsvpView { width: 100%; height: 100%; display: none; flex-direction: column; align-items: center; justify-content: center; position: relative; }
+  .word-container { position: relative; display: flex; align-items: center; justify-content: center; width: 100%; }
+  .word-display { font-family: 'Literata', serif; font-size: 48px; font-weight: 300; color: #f0ede8; text-align: center; line-height: 1; min-height: 60px; display: flex; align-items: center; justify-content: center; }
+  .char-normal { color: #f0ede8; }
+  .char-anchor { color: var(--accent); }
+  .anchor-guide { position: absolute; top: 50%; transform: translateY(-50%); display: flex; align-items: center; gap: 3px; pointer-events: none; }
+  .anchor-guide.left { right: calc(50% + 8px); }
+  .anchor-guide.right { left: calc(50% + 8px); }
+  .guide-dot { width: 3px; height: 3px; background: var(--accent); border-radius: 50%; opacity: 0.5; }
+  .top-info { position: absolute; top: 8px; left: 16px; right: 16px; font-size: 8px; color: #333; letter-spacing: 0.12em; display: flex; justify-content: space-between; pointer-events: none; }
+  .bot-info { position: absolute; bottom: 8px; left: 16px; right: 16px; display: flex; justify-content: space-between; font-size: 9px; color: #444; pointer-events: none; }
+  .progress-bar { position: absolute; bottom: 0; left: 0; height: 1px; background: var(--accent); opacity: 0.4; transition: width 0.2s; }
+ 
+  /* SCROLL / PARAGRAPH VIEW */
+  #scrollView { width: 100%; height: 100%; display: none; position: relative; overflow: hidden; }
+  .scroll-text { font-family: 'Literata', serif; font-size: 13px; font-weight: 300; line-height: 1.6; padding: 12px 20px; height: 100%; display: flex; flex-wrap: wrap; align-content: center; gap: 0 4px; overflow: hidden; }
+  .sw { cursor: pointer; padding: 0 1px; border-radius: 2px; white-space: nowrap; color: #666; transition: color 0.1s; }
+  .sw:hover { background: rgba(232,201,122,0.15); color: var(--text); }
+  .sw.past { color: #3a3a40; }
+  .sw.current { color: var(--accent); font-weight: 500; }
+  .sw.future { color: #666; }
+  .scroll-hint { position: absolute; bottom: 5px; right: 12px; font-size: 8px; color: #2a2a2e; letter-spacing: 0.1em; }
+ 
+  /* PLAYBACK */
+  .playback { display: flex; align-items: center; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  button { font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.1em; border: none; border-radius: 4px; padding: 8px 16px; cursor: pointer; transition: all 0.15s; text-transform: uppercase; }
+  .btn-icon { width: 36px; height: 36px; border-radius: 50%; background: var(--surface2); border: 1px solid var(--border); color: var(--text); font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 0; }
+  .btn-icon:hover { border-color: var(--accent); }
+  .btn-play { width: 44px; height: 44px; background: var(--accent); border: none; color: #111; font-size: 16px; font-weight: bold; }
+  .btn-play:hover { background: #f5d88a; transform: scale(1.05); }
+  .btn-mode { padding: 6px 12px; background: var(--surface2); border: 1px solid var(--border); color: var(--text-dim); font-size: 9px; border-radius: 4px; }
+  .btn-mode.active { border-color: var(--accent); color: var(--accent); }
+  .word-count { font-size: 10px; color: var(--text-dim); margin-left: auto; }
+ 
+  /* CONTROLS */
+  .controls { width: 100%; max-width: 740px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .panel-title { font-size: 9px; letter-spacing: 0.2em; color: var(--text-dim); text-transform: uppercase; margin-bottom: 12px; }
+  .upload-area { border: 1px dashed var(--border); border-radius: 6px; padding: 14px; text-align: center; cursor: pointer; transition: all 0.2s; position: relative; }
+  .upload-area:hover { border-color: var(--accent); background: rgba(232,201,122,0.03); }
+  .upload-area input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .upload-area .icon { font-size: 18px; opacity: 0.3; }
+  .upload-area p { font-size: 10px; color: var(--text-dim); letter-spacing: 0.1em; margin-top: 4px; }
+  .upload-area .formats { font-size: 9px; color: #444; margin-top: 2px; }
+  #epubStatus { font-size: 10px; color: var(--accent); margin-top: 6px; display: none; min-height: 16px; }
+  textarea { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; color: var(--text); font-family: 'IBM Plex Mono', monospace; font-size: 11px; padding: 10px; resize: vertical; min-height: 70px; outline: none; line-height: 1.6; margin-top: 10px; }
+  textarea:focus { border-color: var(--accent); }
+  .btn-row { display: flex; gap: 8px; margin-top: 8px; }
+  .btn-primary { background: var(--accent); color: #111; font-weight: 700; flex: 1; }
+  .btn-primary:hover { background: #f5d88a; }
+  .btn-danger { background: transparent; color: var(--accent2); border: 1px solid rgba(201,122,122,0.3); }
+  .btn-danger:hover { background: rgba(201,122,122,0.1); }
+  .demo-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .demo-btn { font-size: 9px; padding: 4px 8px; background: transparent; border: 1px solid var(--border); color: var(--text-dim); border-radius: 3px; cursor: pointer; letter-spacing: 0.1em; }
+  .demo-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .slider-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .slider-label { font-size: 10px; color: var(--text-dim); width: 80px; flex-shrink: 0; }
+  input[type=range] { flex: 1; -webkit-appearance: none; background: var(--border); height: 2px; border-radius: 1px; outline: none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; background: var(--accent); border-radius: 50%; cursor: pointer; }
+  .slider-value { font-size: 10px; color: var(--accent); width: 44px; text-align: right; flex-shrink: 0; }
+  select { background: var(--surface2); border: 1px solid var(--border); color: var(--text); font-family: 'IBM Plex Mono', monospace; font-size: 10px; padding: 6px 10px; border-radius: 4px; outline: none; cursor: pointer; width: 100%; margin-bottom: 8px; }
+  .check-row { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 6px; }
+  .check-row label { font-size: 10px; color: var(--text-dim); display: flex; gap: 5px; align-items: center; cursor: pointer; }
+  input[type=checkbox] { accent-color: var(--accent); cursor: pointer; }
+  @media (max-width: 600px) { .controls { grid-template-columns: 1fr; } .word-display { font-size: 32px; } }
+</style>
+</head>
+<body>
+ 
+<header>
+  <div class="logo">RSVP <span>NANO</span> — Web Emülatörü</div>
+  <div class="badge">ESP32-S3 · 640×172</div>
+</header>
+ 
+<div class="device">
+  <div class="screen" id="screen">
+    <div class="progress-bar" id="progressBar" style="width:0%"></div>
+    <div class="screen-inner">
+ 
+      <div class="idle-screen" id="idleScreen">
+        <div class="big">📖</div>
+        <p>METİN YÜKLEYİN VEYA YAZI GİRİN</p>
+      </div>
+ 
+      <!-- RSVP -->
+      <div id="rsvpView">
+        <div class="top-info">
+          <span id="chapterLabel"></span>
+          <span id="wpmLabel"></span>
+        </div>
+        <div class="word-container">
+          <div class="anchor-guide left" id="guideLeft">
+            <div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div>
+          </div>
+          <div class="word-display" id="wordDisplay"></div>
+          <div class="anchor-guide right" id="guideRight">
+            <div class="guide-dot"></div><div class="guide-dot"></div><div class="guide-dot"></div>
+          </div>
+        </div>
+        <div class="bot-info">
+          <span id="wordIndex"></span>
+          <span id="timeLeft"></span>
+        </div>
+      </div>
+ 
+      <!-- SCROLL/PARAGRAPH -->
+      <div id="scrollView">
+        <div class="scroll-text" id="scrollText"></div>
+        <div class="scroll-hint">KELIMEYE TIKLA · O NOKTADAN DEVAM ET</div>
+      </div>
+ 
+    </div>
+  </div>
+ 
+  <div class="playback">
+    <button class="btn-mode active" id="btnModeRsvp" onclick="setMode('rsvp')">RSVP</button>
+    <button class="btn-mode" id="btnModeScroll" onclick="setMode('scroll')">SATIR</button>
+    <button class="btn-icon" id="btnRewind" title="Başa sar">⏮</button>
+    <button class="btn-icon" id="btnBack" title="−10 kelime">⏪</button>
+    <button class="btn-icon btn-play" id="btnPlay">▶</button>
+    <button class="btn-icon" id="btnFwd" title="+10 kelime">⏩</button>
+    <button class="btn-icon" id="btnEnd" title="Sona git">⏭</button>
+    <span class="word-count" id="wordCount">—</span>
+  </div>
+</div>
+ 
+<div class="controls">
+  <div class="panel">
+    <div class="panel-title">📄 Metin / Dosya</div>
+    <div class="upload-area" id="uploadArea">
+      <input type="file" id="fileInput" accept=".txt,.epub,.rsvp,.md,.html,.htm">
+      <div class="icon">⬆</div>
+      <p>DOSYA SÜRÜKLE / TIKLA</p>
+      <p class="formats">.epub · .txt · .rsvp · .md · .html</p>
+    </div>
+    <div id="epubStatus"></div>
+    <div class="demo-row">
+      <button class="demo-btn" onclick="loadDemo('tr')">TR Demo</button>
+      <button class="demo-btn" onclick="loadDemo('en')">EN Demo</button>
+      <button class="demo-btn" onclick="loadDemo('chars')">Karakter Testi</button>
+    </div>
+    <textarea id="textInput" placeholder="...veya buraya metin yapıştırın (Türkçe tam destekli)"></textarea>
+    <div class="btn-row">
+      <button class="btn-primary" onclick="loadText()">YÜKLE</button>
+      <button class="btn-danger" onclick="clearAll()">TEMİZLE</button>
+    </div>
+  </div>
+ 
+  <div class="panel">
+    <div class="panel-title">⚙ Ayarlar</div>
+    <div class="slider-row">
+      <span class="slider-label">Hız (WPM)</span>
+      <input type="range" id="wpmSlider" min="100" max="1000" step="25" value="300" oninput="setWpm(+this.value)">
+      <span class="slider-value" id="wpmVal">300</span>
+    </div>
+    <div class="slider-row">
+      <span class="slider-label">Font Boyutu</span>
+      <input type="range" id="fontSlider" min="20" max="64" step="2" value="48" oninput="setFontSize(+this.value)">
+      <span class="slider-value" id="fontVal">48px</span>
+    </div>
+    <div class="slider-row">
+      <span class="slider-label">Noktalama</span>
+      <input type="range" id="punctSlider" min="0" max="200" step="10" value="100" oninput="punctScale=+this.value;document.getElementById('punctVal').textContent=this.value+'%'">
+      <span class="slider-value" id="punctVal">100%</span>
+    </div>
+    <div class="slider-row">
+      <span class="slider-label">Uzun Kelime</span>
+      <input type="range" id="longSlider" min="0" max="200" step="10" value="100" oninput="longScale=+this.value;document.getElementById('longVal').textContent=this.value+'%'">
+      <span class="slider-value" id="longVal">100%</span>
+    </div>
+    <select id="fontSelect" onchange="setFontFamily(this.value)">
+      <option value="'Literata', serif">Literata (Serif)</option>
+      <option value="'IBM Plex Mono', monospace">IBM Plex Mono</option>
+      <option value="Georgia, serif">Georgia</option>
+      <option value="system-ui, sans-serif">Sans-Serif</option>
+    </select>
+    <div class="check-row">
+      <label><input type="checkbox" id="cbGuides" checked onchange="toggleGuides(this.checked)"> Anchor Rehber</label>
+      <label><input type="checkbox" id="cbAnchor" checked onchange="anchorColor=this.checked;updateRsvp()"> Anchor Renk</label>
+    </div>
+  </div>
+</div>
+ 
+<script>
+// ══ STATE ══
+let words = [];
+let currentIndex = 0;
+let isPlaying = false;
+let timer = null;
+let wpm = 300;
+let punctScale = 100;
+let longScale = 100;
+let anchorColor = true;
+let readMode = 'rsvp';
+let currentFontFamily = "'Literata', serif";
+ 
+// ══ DEMOS ══
+const DEMOS = {
+  tr: `Bir varmış bir yokmuş, evvel zaman içinde, kalbur saman içinde. Padişahın üç oğlu varmış: büyük oğul, ortanca ve en küçük olan Keloğlan. Günlerden bir gün padişah hastalanmış ve oğullarını yanına çağırmış. "Bana şu dağın ardındaki büyülü elmadan getirin, iyileşeyim" demiş. Büyük oğul hemen yola çıkmış; ama dağın başındaki dev onu korkutmuş, geri dönmüş. Ortanca da aynı şekilde eli boş dönmüş. Sıra Keloğlan'a gelmiş. Keloğlan yola çıkarken yanına kuru bir ekmek almış, hiçbir şeyden korkmadan ilerlemiş. Dağın başındaki dev ona saldırmak isteyince Keloğlan şöyle demiş: "Dur bakalım, önce şu ekmeği paylaşalım." Dev şaşırmış; kimse ona böyle davranmamıştı. Birlikte yemişler, dost olmuşlar. Dev ona elmayı vermiş, Keloğlan padişahın sarayına dönmüş. Padişah iyileşmiş ve tahtını Keloğlan'a bırakmış.`,
+  en: `The most beautiful thing we can experience is the mysterious. It is the source of all true art and science. He to whom the emotion is a stranger, who can no longer pause to wonder and stand wrapped in awe, is as good as dead — his eyes are closed. The insight into the mystery of life, coupled though it be with fear, has also given rise to religion. To know what is impenetrable to us really exists, manifesting itself as the highest wisdom and the most radiant beauty, which our dull faculties can comprehend only in their most primitive forms — this knowledge, this feeling, is at the center of true religiousness.`,
+  chars: `Türkçe karakter testi: şeker çağdaş öğrenci üzüm ığdır İstanbul Ğ ğ Ş ş İ ı Ö ö Ü ü Ç ç. Almanca: Übermut größer Straße Fußgänger. Fransızca: garçon français Noël façade. Polonyaca: Łódź książę Śląsk Żubr. Romanca: Țară Știință înțelegere. Tüm Latin genişletilmiş karakterler tam desteklidir.`
+};
+ 
+function loadDemo(type) {
+  document.getElementById('textInput').value = DEMOS[type];
+  initWords(DEMOS[type].split(/\s+/).filter(w => w.length > 0), type + ' demo');
+}
+ 
+// ══ EPUB PARSER (saf JS, ZIP + DecompressionStream) ══
+async function parseEpub(file) {
+  setEpubStatus('⏳ EPUB açılıyor...');
+  try {
+    const ab = await file.arrayBuffer();
+    const zip = await readZip(ab);
+ 
+    const containerXml = utf8(zip['META-INF/container.xml']);
+    const opfPath = containerXml.match(/full-path="([^"]+)"/)?.[1];
+    if (!opfPath) throw new Error('OPF bulunamadı');
+ 
+    const opfXml = utf8(zip[opfPath]);
+    const opfDir = opfPath.includes('/') ? opfPath.slice(0, opfPath.lastIndexOf('/') + 1) : '';
+    const title = (opfXml.match(/<dc:title[^>]*>([^<]+)/i)?.[1] || file.name.replace('.epub','')).trim();
+ 
+    // manifest
+    const manifest = {};
+    const iRe = /<item\b[^>]*>/g;
+    let m;
+    while ((m = iRe.exec(opfXml)) !== null) {
+      const tag = m[0];
+      const id = (tag.match(/\bid="([^"]+)"/) || [])[1];
+      const href = (tag.match(/\bhref="([^"]+)"/) || [])[1];
+      if (id && href) manifest[id] = normPath(opfDir + decodeURIComponent(href.split('#')[0]));
+    }
+ 
+    // spine
+    const spineIds = [...opfXml.matchAll(/<itemref\b[^>]*idref="([^"]+)"/g)].map(x => x[1]);
+    setEpubStatus(`⏳ ${spineIds.length} bölüm işleniyor...`);
+ 
+    const allWords = [];
+    for (const id of spineIds) {
+      const path = manifest[id];
+      if (!path || !zip[path]) continue;
+      const html = utf8(zip[path]);
+      const text = htmlToText(html);
+      if (text.trim()) allWords.push(...text.split(/\s+/).filter(w => w.length > 0));
+    }
+ 
+    setEpubStatus('');
+    return { words: allWords, title };
+  } catch(e) {
+    setEpubStatus('❌ ' + e.message);
+    setTimeout(() => setEpubStatus(''), 4000);
+    return null;
+  }
+}
+ 
+function setEpubStatus(msg) {
+  const el = document.getElementById('epubStatus');
+  el.textContent = msg;
+  el.style.display = msg ? 'block' : 'none';
+}
+ 
+function utf8(data) {
+  if (!data) return '';
+  if (typeof data === 'string') return data;
+  return new TextDecoder('utf-8', { fatal: false }).decode(data);
+}
+ 
+function normPath(p) {
+  const out = [];
+  for (const part of p.split('/')) {
+    if (part === '..') out.pop();
+    else if (part && part !== '.') out.push(part);
+  }
+  return out.join('/');
+}
+ 
+async function readZip(ab) {
+  const u8 = new Uint8Array(ab);
+  const dv = new DataView(ab);
+  const files = {};
+  let i = 0;
+  while (i < u8.length - 4) {
+    if (dv.getUint32(i, true) !== 0x04034b50) { i++; continue; }
+    const comp = dv.getUint16(i + 8, true);
+    const compSz = dv.getUint32(i + 18, true);
+    const fnLen = dv.getUint16(i + 26, true);
+    const exLen = dv.getUint16(i + 28, true);
+    const fn = new TextDecoder().decode(u8.slice(i + 30, i + 30 + fnLen));
+    const start = i + 30 + fnLen + exLen;
+    const raw = u8.slice(start, start + compSz);
+    if (comp === 0) {
+      files[fn] = raw;
+    } else if (comp === 8) {
+      try {
+        const ds = new DecompressionStream('deflate-raw');
+        const w = ds.writable.getWriter();
+        const r = ds.readable.getReader();
+        w.write(raw); w.close();
+        const chunks = []; let tot = 0;
+        while (true) { const {done, value} = await r.read(); if (done) break; chunks.push(value); tot += value.length; }
+        const out = new Uint8Array(tot); let off = 0;
+        for (const c of chunks) { out.set(c, off); off += c.length; }
+        files[fn] = out;
+      } catch { files[fn] = raw; }
+    }
+    i = start + compSz;
+  }
+  return files;
+}
+ 
+function htmlToText(html) {
+  return html
+    .replace(/<head[\s\S]*?<\/head>/gi, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<nav[\s\S]*?<\/nav>/gi, '')
+    .replace(/<svg[\s\S]*?<\/svg>/gi, '')
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<\/(p|div|li|h[1-6]|blockquote|td|tr|section)[^>]*>/gi, ' ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(+n))
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/\s+/g, ' ').trim();
+}
+ 
+// ══ FILE INPUT ══
+document.getElementById('fileInput').addEventListener('change', async e => {
+  const file = e.target.files[0]; if (!file) return;
+  await handleFile(file); e.target.value = '';
+});
+ 
+async function handleFile(file) {
+  const name = file.name.toLowerCase();
+  if (name.endsWith('.epub')) {
+    const res = await parseEpub(file);
+    if (res && res.words.length > 0) initWords(res.words, res.title);
+  } else {
+    const text = await file.text();
+    let ws;
+    if (name.endsWith('.rsvp')) {
+      ws = text.split('\n').filter(l => !l.startsWith('@')).join(' ').split(/\s+/).filter(w => w.length > 0);
+    } else {
+      ws = text.split(/\s+/).filter(w => w.length > 0);
+    }
+    initWords(ws, file.name);
+  }
+}
+ 
+function loadText() {
+  const text = document.getElementById('textInput').value.trim();
+  if (!text) return;
+  initWords(text.split(/\s+/).filter(w => w.length > 0), 'metin');
+}
+ 
+function initWords(ws, name) {
+  words = ws;   // ← SINIRSIZ, hiç kısaltılmıyor
+  currentIndex = 0;
+  stopReading();
+  document.getElementById('chapterLabel').textContent = (name || '').replace(/\.[^.]+$/, '').slice(0, 32);
+  document.getElementById('wordCount').textContent = words.length.toLocaleString('tr-TR') + ' kelime';
+  document.getElementById('idleScreen').style.display = 'none';
+  setMode(readMode, true);
+}
+ 
+function clearAll() {
+  words = []; currentIndex = 0; stopReading();
+  document.getElementById('textInput').value = '';
+  document.getElementById('wordCount').textContent = '—';
+  document.getElementById('idleScreen').style.display = 'flex';
+  document.getElementById('rsvpView').style.display = 'none';
+  document.getElementById('scrollView').style.display = 'none';
+  document.getElementById('progressBar').style.width = '0%';
+  document.getElementById('chapterLabel').textContent = '';
+  document.getElementById('wpmLabel').textContent = '';
+  document.getElementById('wordIndex').textContent = '';
+  document.getElementById('timeLeft').textContent = '';
+}
+ 
+// ══ MODE ══
+function setMode(mode, force) {
+  if (readMode === mode && !force) return;
+  const wasPlaying = isPlaying;
+  if (wasPlaying) stopReading();
+  readMode = mode;
+  document.getElementById('btnModeRsvp').classList.toggle('active', mode === 'rsvp');
+  document.getElementById('btnModeScroll').classList.toggle('active', mode === 'scroll');
+  if (words.length === 0) return;
+  document.getElementById('rsvpView').style.display = mode === 'rsvp' ? 'flex' : 'none';
+  document.getElementById('scrollView').style.display = mode === 'scroll' ? 'flex' : 'none';
+  if (mode === 'rsvp') { updateRsvp(); if (wasPlaying) startReading(); }
+  else renderScroll();
+}
+ 
+// ══ ANCHOR ══
+function isLetter(c) {
+  const code = c.charCodeAt(0);
+  return (code >= 65 && code <= 90) || (code >= 97 && code <= 122) || code > 127;
+}
+ 
+function anchorIdx(word) {
+  let s = 0; while (s < word.length && !isLetter(word[s])) s++;
+  let e = word.length - 1; while (e > s && !isLetter(word[e])) e--;
+  const len = e - s + 1;
+  if (len <= 3) return s;
+  if (len <= 5) return s + 1;
+  if (len <= 9) return s + 2;
+  return s + 3;
+}
+ 
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+ 
+function renderWordHtml(word) {
+  if (!anchorColor) return `<span class="char-normal">${esc(word)}</span>`;
+  const ai = anchorIdx(word);
+  return [...word].map((c, i) => `<span class="${i===ai?'char-anchor':'char-normal'}">${esc(c)}</span>`).join('');
+}
+ 
+// ══ PACING ══
+function syllables(word) {
+  const v = 'aeıioöuüàáâäåæèéêëìíîïòóôöøùúûüýAEIIOÖUÜÀÁÂÄÅÆÈÉÊËÌÍÎÏÒÓÔÖØÙÚÛÜÝ';
+  let g = 0, inV = false;
+  for (const c of word) { if (v.includes(c)) { if (!inV){g++;inV=true;} } else inV=false; }
+  return Math.max(1, g);
+}
+ 
+function letterCount(word) { return [...word].filter(isLetter).length; }
+ 
+function trailChar(word) { return word.replace(/["')}\]]+$/, '').slice(-1); }
+ 
+function wordMs(word, next) {
+  const base = 60000 / wpm;
+  if (!word) return base;
+  let bonus = 0;
+  const L = letterCount(word);
+  if (L > 6) {
+    let p = L > 14 ? (L-14)*12 + (4)*9 + (4)*6 : L > 10 ? (L-10)*9 + (4)*6 : (L-6)*6;
+    bonus += Math.min(170, p);
+  }
+  const syl = syllables(word);
+  if (syl > 2) bonus += Math.min(50, (syl-2)*10);
+  const longMs = base * bonus/100 * longScale/100;
+ 
+  let pp = 0;
+  if (word.endsWith('...')||word.endsWith('…')) pp=110;
+  else {
+    const t = trailChar(word);
+    if (t===',') pp=45; else if (t==='-') pp=60; else if (t===';'||t===':') pp=80;
+    else if (t==='.'||t==='!'||t==='?') {
+      const n = next||''; const nLow = n.length>0&&isLetter(n[0])&&n[0]===n[0].toLowerCase();
+      pp = nLow ? 0 : 135;
+    }
+  }
+  const punctMs = base * pp/100 * punctScale/100;
+  return Math.round(base + longMs + punctMs);
+}
+ 
+// ══ RSVP DISPLAY ══
+function updateRsvp() {
+  if (!words.length) return;
+  const word = words[currentIndex] || '';
+  document.getElementById('wordDisplay').innerHTML = renderWordHtml(word);
+  const pct = words.length > 1 ? currentIndex / (words.length-1) * 100 : 0;
+  document.getElementById('progressBar').style.width = pct + '%';
+  document.getElementById('wordIndex').textContent = `${(currentIndex+1).toLocaleString()} / ${words.length.toLocaleString()}`;
+  const sec = Math.round((words.length - currentIndex) * 60 / wpm);
+  document.getElementById('timeLeft').textContent = `~${Math.floor(sec/60)}:${(sec%60).toString().padStart(2,'0')}`;
+  document.getElementById('wpmLabel').textContent = `${wpm} WPM`;
+}
+ 
+// ══ SCROLL/PARAGRAPH VIEW ══
+function renderScroll() {
+  const container = document.getElementById('scrollText');
+  // ~55 kelime penceresi, mevcut kelime ortada
+  const WIN = 55, half = Math.floor(WIN/2);
+  const start = Math.max(0, currentIndex - half);
+  const end = Math.min(words.length, start + WIN);
+  container.innerHTML = '';
+ 
+  for (let i = start; i < end; i++) {
+    const span = document.createElement('span');
+    span.className = 'sw ' + (i < currentIndex ? 'past' : i === currentIndex ? 'current' : 'future');
+    span.textContent = words[i];
+    span.dataset.i = i;
+    span.onclick = () => {
+      currentIndex = i;
+      if (readMode === 'rsvp') { updateRsvp(); if (isPlaying) { stopReading(); startReading(); } }
+      else { renderScroll(); }
+    };
+    container.appendChild(span);
+    if (i < end-1) container.appendChild(document.createTextNode(' '));
+  }
+ 
+  // progress bar
+  const pct = words.length > 1 ? currentIndex / (words.length-1) * 100 : 0;
+  document.getElementById('progressBar').style.width = pct + '%';
+}
+ 
+// ══ PLAYBACK ══
+function advance() {
+  if (currentIndex >= words.length - 1) { stopReading(); return; }
+  currentIndex++;
+  updateRsvp();
+  if (readMode === 'scroll') renderScroll();
+  timer = setTimeout(advance, wordMs(words[currentIndex], words[currentIndex+1]));
+}
+ 
+function startReading() {
+  if (!words.length) return;
+  isPlaying = true;
+  document.getElementById('btnPlay').textContent = '⏸';
+  timer = setTimeout(advance, wordMs(words[currentIndex], words[currentIndex+1]));
+}
+ 
+function stopReading() {
+  isPlaying = false; clearTimeout(timer);
+  document.getElementById('btnPlay').textContent = '▶';
+}
+ 
+function togglePlay() {
+  if (!words.length) return;
+  if (isPlaying) stopReading();
+  else { if (currentIndex >= words.length-1) currentIndex = 0; startReading(); }
+}
+ 
+function seek(delta) {
+  const wp = isPlaying; stopReading();
+  currentIndex = Math.max(0, Math.min(words.length-1, currentIndex + delta));
+  updateRsvp();
+  if (readMode === 'scroll') renderScroll();
+  if (wp) startReading();
+}
+ 
+document.getElementById('btnPlay').addEventListener('click', togglePlay);
+document.getElementById('btnRewind').addEventListener('click', () => seek(-currentIndex));
+document.getElementById('btnBack').addEventListener('click', () => seek(-10));
+document.getElementById('btnFwd').addEventListener('click', () => seek(10));
+document.getElementById('btnEnd').addEventListener('click', () => seek(words.length));
+ 
+// Ekrana tıklayınca durdur/başlat (scroll-word hariç)
+document.getElementById('screen').addEventListener('click', e => {
+  if (e.target.classList.contains('sw')) return;
+  if (!words.length) return;
+  togglePlay();
+});
+ 
+document.addEventListener('keydown', e => {
+  if (['TEXTAREA','INPUT'].includes(e.target.tagName)) return;
+  if (e.code==='Space'){e.preventDefault();togglePlay();}
+  if (e.code==='ArrowLeft') seek(-10);
+  if (e.code==='ArrowRight') seek(10);
+  if (e.code==='ArrowUp'){setWpm(Math.min(1000,wpm+25));document.getElementById('wpmSlider').value=wpm;}
+  if (e.code==='ArrowDown'){setWpm(Math.max(100,wpm-25));document.getElementById('wpmSlider').value=wpm;}
+  if (e.code==='KeyS') setMode(readMode==='rsvp'?'scroll':'rsvp');
+});
+ 
+// ══ SETTINGS ══
+function setWpm(v) { wpm=v; document.getElementById('wpmVal').textContent=v; document.getElementById('wpmLabel').textContent=v+' WPM'; }
+function setFontSize(v) { document.getElementById('wordDisplay').style.fontSize=v+'px'; document.getElementById('fontVal').textContent=v+'px'; }
+function setFontFamily(v) { currentFontFamily=v; document.getElementById('wordDisplay').style.fontFamily=v; }
+function toggleGuides(on) { ['guideLeft','guideRight'].forEach(id => document.getElementById(id).style.display=on?'flex':'none'); }
+ 
+// Drag & drop
+const ua = document.getElementById('uploadArea');
+ua.addEventListener('dragover', e=>{e.preventDefault();ua.style.borderColor='var(--accent)';});
+ua.addEventListener('dragleave', ()=>{ua.style.borderColor='var(--border)';});
+ua.addEventListener('drop', async e=>{
+  e.preventDefault(); ua.style.borderColor='var(--border)';
+  const file = e.dataTransfer.files[0]; if (file) await handleFile(file);
+});
+ 
+// Başlangıçta TR demoyu yükle
+loadDemo('tr');
+</script>
+</body>
+</html>
